@@ -75,7 +75,7 @@ def get_immo_data():
 def extract_info(estate_data: dict)-> str:
     try:
         estate_info = ""
-        estate_info += f"{estate_data['type']}: {estate_data['title']}"
+        estate_info += f"{str(estate_data['estateTypes'])}: {estate_data['title']}"
         estate_info += f"\nArea: {estate_data['areas'][0]['sizeMin']}, Rooms: {estate_data['roomsMin']}"
         
         for pricing in estate_data["prices"]:
