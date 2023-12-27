@@ -75,7 +75,7 @@ def get_immo_data():
 def extract_info(estate_data: dict)-> str:
     try:
         estate_info = ""
-        estate_info += f"{str(estate_data['estateTypes'])}: {estate_data['title']}"
+        estate_info += f"{estate_data['title']}"
         estate_info += f"\nArea: {estate_data['areas'][0]['sizeMin']}, Rooms: {estate_data['roomsMin']}"
         
         for pricing in estate_data["prices"]:
@@ -90,6 +90,8 @@ def extract_info(estate_data: dict)-> str:
     except:
         estate_info = f"error in extracting data from estate \n\n"
 
+    if "[TAUSCHWOHNUNG]" in estate_info or "Wohnungsswap" in estate_info:
+        return None
     return estate_info
 
 TOKEN = ""
@@ -111,7 +113,8 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id=update.effective_chat.id,
         text=f"Hi {update.effective_user.first_name}, here are the newest estates:")
     for estate in get_immo_data():
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=extract_info(estate))
+        text=extract_info(estate)
+        if text: await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
 from telegram.ext import CommandHandler
 start_handler = CommandHandler('start', start)
