@@ -92,8 +92,6 @@ def extract_info(estate_data: dict)-> str:
 
     return estate_info
 
-
-
 TOKEN = ""
 
 from telegram import Update
@@ -105,10 +103,13 @@ application = ApplicationBuilder().token(TOKEN).build()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text="I'm a bot, please talk to me!"
+        text=f"Hi {update.effective_user.first_name}, say anything..."
     )
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"Hi {update.effective_user.first_name}, here are the newest estates:")
     for estate in get_immo_data():
         await context.bot.send_message(chat_id=update.effective_chat.id, text=extract_info(estate))
 
