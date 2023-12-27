@@ -75,18 +75,18 @@ def get_immo_data():
 def extract_info(estate_data: dict)-> str:
     try:
         estate_info = ""
-        estate_info += f"{estate_data['title']}"
-        estate_info += f"\nArea: {estate_data['areas'][0]['sizeMin']}, Rooms: {estate_data['roomsMin']}"
+        estate_info += f"{estate_data['title']}\n"
+        estate_info += f"\narea: {estate_data['areas'][0]['sizeMin']}, Rooms: {estate_data['roomsMin']}"
         
         for pricing in estate_data["prices"]:
-            estate_info += f"\n{pricing['type']}: {pricing['amountMin']} {pricing['currency']}"
+            estate_info += f"\n{pricing['type'].lower().replace('_', ' ')}: {pricing['amountMin']} {pricing['currency']}"
         
         location_data = estate_data["place"]
         try: estate_info += f"\npostcode: {location_data['postcode']}, city: {location_data['city']}, district: {location_data['district']}"
         except: estate_info += f"\n no location data"
 
         estate_picture = random.choice(estate_data["pictures"])
-        estate_info += f"\nPicture {estate_picture['description']}: {estate_picture['imageUri']}\n\n"
+        estate_info += f"\npicture: {estate_picture['description']}: {estate_picture['imageUri']}\n\n"
     except:
         estate_info = f"error in extracting data from estate \n\n"
 
