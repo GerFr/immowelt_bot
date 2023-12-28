@@ -1,8 +1,11 @@
 from bs4 import BeautifulSoup
 import requests
-import re
 import json
-import random
+from telegram import Update
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
+from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import CommandHandler
+
 
 def get_titles(request_content: bytes)->object:
     soup = BeautifulSoup(request_content, 'html.parser')
@@ -65,11 +68,17 @@ def get_local_jsons(directoy: str)-> list:
 def largest_json(list)-> dict:
     return max(list, key=lambda item: len(item.keys()))
 
-def get_immo_data():
-    r = requests.get("https://www.immowelt.de/suche/hamburg-ottensen/wohnungen/mieten?lat=53.5513&lon=9.92234&sr=3")
-    request_content = r.content.decode('utf-8','ignore')
-    immo_data = largest_json(get_data(request_content))["initialState"]["estateSearch"]["data"]["estates"]
-    return immo_data
+
+def get_immo_data(url):
+    try:
+        r = requests.get(url)
+        request_content = r.content.decode('utf-8','ignore')
+        immo_data = largest_json(get_data(request_content))
+        with open("remote_json.json", "w") as file:
+            json.dump(immo_data, file)
+        return immo_data["initialState"]["estateSearch"]["data"]["estates"]
+    except Exception as e:
+        return None
 
 
 def extract_info(estate_data: dict)-> str:
@@ -85,40 +94,51 @@ def extract_info(estate_data: dict)-> str:
         try: estate_info += f"\npostcode: {location_data['postcode']}, city: {location_data['city']}, district: {location_data['district']}"
         except: estate_info += f"\n no location data"
 
-        estate_picture = random.choice(estate_data["pictures"])
+        estate_picture = estate_data["pictures"][0]
         estate_info += f"\npicture: {estate_picture['description']}: {estate_picture['imageUri']}\n\n"
-    except:
-        estate_info = f"error in extracting data from estate \n\n"
+
+    except: 
+        estate_info = f"\nerror in extracting data from estate \n\n"
 
     if "[TAUSCHWOHNUNG]" in estate_info or "Wohnungsswap" in estate_info:
         return None
     return estate_info
 
-TOKEN = ""
 
-from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
-from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes
+def get_url(message: str)->str:
+    return f"https://www.immowelt.de/suche/{message}/wohnungen/"
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    
+    name = update.effective_user.first_name
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"Hi {name}, say anything..."
+    )
+
+
+async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.effective_message.text
+    message_url = get_url(message)
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Hi {update.effective_user.first_name},\nlooking into the following Url:\n{message_url}")
+    estate_list = get_immo_data(message_url)
+    
+    if  not estate_list: await context.bot.send_message(chat_id=update.effective_chat.id, 
+        text=f"You used an invalid location, go here to search:\n{DEFAULT_URL}\ntry these locations:\nberlin-charlottenburg\nkoeln-porz\nhamburg-ottensen...")
+    else: 
+        for estate in estate_list:
+            text=extract_info(estate)
+            if text: await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+    await context.bot.send_message(chat_id=update.effective_chat.id, text="Done!")
+
+
+TOKEN = ""
+DEFAULT_URL = "https://www.immowelt.de/suche/wohnungen/"
 
 application = ApplicationBuilder().token(TOKEN).build()
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=f"Hi {update.effective_user.first_name}, say anything..."
-    )
-
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=f"Hi {update.effective_user.first_name}, here are the newest estates:")
-    for estate in get_immo_data():
-        text=extract_info(estate)
-        if text: await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
-
-from telegram.ext import CommandHandler
 start_handler = CommandHandler('start', start)
-
 echo_handler = MessageHandler(filters.TEXT & (~filters.COMMAND), echo)
 application.add_handler(start_handler)
 application.add_handler(echo_handler)
