@@ -132,8 +132,11 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if text: await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Done!")
 
+def get_token(file_dir):
+    with open(file_dir, "r") as file:
+        return file.read()
 
-TOKEN = ""
+TOKEN = get_token("token.txt")
 DEFAULT_URL = "https://www.immowelt.de/suche/wohnungen/"
 
 application = ApplicationBuilder().token(TOKEN).build()
