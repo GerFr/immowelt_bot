@@ -5,20 +5,10 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes
 from telegram.ext import CommandHandler
-
-def get_titles(request_content: bytes)->object:
-    soup = BeautifulSoup(request_content, 'html.parser')
-    text = str(soup.find_all("h2"))
-    text_seperated = [title.strip("</h2>").strip("[</h2>") for title in text.split("</h2>, ") if "[TAUSCHWOHNUNG]" not in title and "Wohnungsswap" not in title and not "class=" in title]
-    formatted_text = ""
-    for i, title in enumerate(text_seperated):
-        formatted_text += f"{i+1:3}: {title}\n"
-    return formatted_text
-
-
-def get_data(request_content: bytes)->list:
-    soup = BeautifulSoup(request_content, 'html.parser')
-    return extract_jsons_from_string(str(soup))
+import pandas as pd
+import plotnine as p9
+import warnings
+warnings.filterwarnings('ignore')
 
 
 def extract_jsons_from_string(data_string: str)-> list:
@@ -56,16 +46,17 @@ def extract_jsons_from_string(data_string: str)-> list:
     return list(single_jsons.values())
 
 
-def get_local_jsons(directoy: str)-> list:
-    text = ""  
-    with open(directoy) as file:
-        for line in file:
-            text += line
-    return extract_jsons_from_string(text)
+def get_data(request_content: bytes)->list:
+    soup = BeautifulSoup(request_content, 'html.parser')
+    return extract_jsons_from_string(str(soup))
 
 
 def largest_json(list)-> dict:
     return max(list, key=lambda item: len(item.keys()))
+
+
+def get_url(message: str)->str:
+    return f"https://www.immowelt.de/suche/{message}/wohnungen/mieten"
 
 
 def get_immo_data(url):
@@ -78,38 +69,102 @@ def get_immo_data(url):
         return immo_data["initialState"]["estateSearch"]["data"]["estates"]
     except Exception as e:
         return None
+ 
+
+def filter_estates(keywords:list, estates:dict, category:str)->list:
+    return [estate for estate in estates if all([keyword not in estate[category] for keyword in keywords])] 
+
+
+def sort_estates(estates:dict)->dict:
+    return sorted(estates, key = lambda estate: estate["prices"][0]["amountMin"])
 
 
 def extract_info(estate_data: dict)-> str:
-    try:
+    try: #use get instead
         estate_info = ""
-        estate_info += f"{estate_data['title']}\n"
-        estate_info += f"\narea: {estate_data['areas'][0]['sizeMin']}, Rooms: {estate_data['roomsMin']}"
+        estate_info += f"{estate_data['title']}\nid: {estate_data['id']}\n"
+        estate_info += f"\narea: {estate_data['areas'][0]['sizeMin']}, "
+        estate_info += f"Rooms: {estate_data['roomsMin']}"
         
         for pricing in estate_data["prices"]:
-            estate_info += f"\n{pricing['type'].lower().replace('_', ' ')}: {pricing['amountMin']} {pricing['currency']}"
-        
-        location_data = estate_data["place"]
-        try: estate_info += f"\npostcode: {location_data['postcode']}, city: {location_data['city']}, district: {location_data['district']}"
-        except: estate_info += f"\n no location data"
+            estate_info += f"\n{pricing['type'].lower().replace('_', ' ')}: "
+            estate_info += f"{pricing['amountMin']} {pricing['currency']}"
+         
+        try: 
+            location_data = estate_data["place"]
+            estate_info += f"\npostcode: {location_data['postcode']}, "
+            estate_info += f"city: {location_data['city']}, "
+            estate_info += f"district: {location_data['district']}"
+        except: 
+            estate_info += f"\n no location data"
 
         estate_picture = estate_data["pictures"][0]
         estate_info += f"\npicture: {estate_picture['description']}: {estate_picture['imageUri']}\n\n"
-
+        return estate_info
+    
     except: 
-        estate_info = f"\nerror in extracting data from estate \n\n"
+        print(f"String creation failed for {estate_data['id']}")
+        return f"\nerror in extracting data from estate \n\n"
 
-    if "[TAUSCHWOHNUNG]" in estate_info or "Wohnungsswap" in estate_info:
-        return None
-    return estate_info
+    
+def get_series(estate_data: dict)->pd.Series:
+    try:
+        cold = estate_data["prices"][0]
+        warm = estate_data["prices"][1] if len(estate_data["prices"])>1 else {"amountMin":None}
+        location_data = estate_data["place"]
+        
+        #change default values, use get
+        area = estate_data["areas"][0]["sizeMin"] #if len(estate_data["areas"])>0 else 50
+        return pd.Series({
+            "id":estate_data["id"], 
+            "area":area,"rooms":str(estate_data["roomsMin"]), 
+            "cold": cold["amountMin"], 
+            "warm": warm["amountMin"], 
+            "district":location_data["district"]})
+    
+    except Exception as e:
+        print(f"Series creation failed for {estate_data['id']}")
+        return pd.Series()
 
 
-def get_url(message: str)->str:
-    return f"https://www.immowelt.de/suche/{message}/wohnungen/mieten"
+def get_dataframe(series_list:list)->pd.DataFrame:
+    return pd.DataFrame([*series_list])
+
+
+def create_images(estate_dataframe:pd.DataFrame)->list:
+    estate_dataframe['area_average']=estate_dataframe['area'].apply(func=lambda area: (str(len(str((area//50)*50)))+": "+str((area//50)*50)))
+    
+    plots = [
+    (p9.ggplot(estate_dataframe, p9.aes(x='rooms', y='cold', fill='rooms')) 
+        + p9.geom_violin(draw_quantiles=0.5, trim=False)
+        + p9.scale_fill_brewer(type='qual')
+        + p9.theme_minimal()),
+    (p9.ggplot(estate_dataframe) 
+        + p9.aes(x="rooms", fill="rooms") 
+        + p9.geom_bar()
+        + p9.theme_minimal()),
+    (p9.ggplot(estate_dataframe) 
+        + p9.aes(x="district", fill="district") 
+        + p9.geom_bar()
+        + p9.theme_minimal()),
+    (p9.ggplot(estate_dataframe, p9.aes(x='area_average', y='cold', fill='area_average')) 
+        + p9.geom_violin(draw_quantiles=0.5, trim=False)
+        + p9.scale_fill_brewer(type='qual')
+        + p9.theme_minimal()),
+    (p9.ggplot(estate_dataframe, p9.aes(x='rooms', y='area', fill='rooms')) 
+        + p9.geom_violin(draw_quantiles=0.5, trim=False)
+        + p9.scale_fill_brewer(type='qual')
+        + p9.theme_minimal())]
+    
+    images = []
+    for i, plot in enumerate(plots):
+        name = f'img{i}.png'
+        plot.save(filename = name, height=5, width=5, units = 'in', dpi=1000)
+        images.append(name)
+    return images
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    
     name = update.effective_user.first_name
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
@@ -123,18 +178,30 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Hi {update.effective_user.first_name},\nlooking into the following Url:\n{message_url}")
     estate_list = get_immo_data(message_url)
     
-    if  not estate_list: await context.bot.send_message(chat_id=update.effective_chat.id, 
+    if  not estate_list: 
+        await context.bot.send_message(chat_id=update.effective_chat.id, 
         text=f"You used an invalid location, go here to search:\n{DEFAULT_URL}\ntry these locations:\nberlin-charlottenburg\nkoeln-porz\nhamburg-ottensen...")
     else: 
-        for estate in estate_list:
-            text=extract_info(estate)
-            if text: await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"analysis...")
+        
+        filtered_estates = sort_estates(filter_estates(["[TAUSCHWOHNUNG]","Wohnungsswap"], estate_list, "title"))
+        messages = [extract_info(estate) for estate in filtered_estates]
+        estate_dataframe = get_dataframe([get_series(estate) for estate in filtered_estates])
+        images = create_images(estate_dataframe)
+        
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"sending...")
+        for image in images:
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(image, 'rb'))
+        for message in messages:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Done!")
 
+
 def get_token(file_dir):
-    with open(file_dir, "r") as file:
-        return file.readline(46)
-        
+    with open(file_dir, "r") as file: return file.readline(46)
+
+
 TOKEN = get_token("token.txt")
 DEFAULT_URL = "https://www.immowelt.de/suche/wohnungen/mieten"
 

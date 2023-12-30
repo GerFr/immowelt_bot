@@ -1,2 +1,4 @@
 token.txt
 *.json
+*.out
+*.png
