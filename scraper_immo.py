@@ -134,8 +134,8 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def get_token(file_dir):
     with open(file_dir, "r") as file:
-        return file.read()
-
+        return file.readline(46)
+        
 TOKEN = get_token("token.txt")
 DEFAULT_URL = "https://www.immowelt.de/suche/wohnungen/"
 
