@@ -82,24 +82,29 @@ def sort_estates(estates:dict)->dict:
 def extract_info(estate_data: dict)-> str:
     try: #use get instead
         estate_info = ""
-        estate_info += f"{estate_data['title']}\nid: {estate_data['id']}\n"
-        estate_info += f"\narea: {estate_data['areas'][0]['sizeMin']}, "
-        estate_info += f"Rooms: {estate_data['roomsMin']}"
+        estate_info += (
+        f"{estate_data['title']}\n"+"```"+
+        f"\n{'id:'}\t{estate_data['id']}"+
+        f"\n{'area:':<30}{estate_data['areas'][0]['sizeMin']}"+
+        f"\n{'Rooms:':<30}{estate_data['roomsMin']}")
         
         for pricing in estate_data["prices"]:
-            estate_info += f"\n{pricing['type'].lower().replace('_', ' ')}: "
-            estate_info += f"{pricing['amountMin']} {pricing['currency']}"
+            estate_info += (
+            f"\n{pricing['type'].lower().replace('_', ' ')+':':30}"+
+            f"{pricing['amountMin']} {pricing['currency']}")
          
         try: 
             location_data = estate_data["place"]
-            estate_info += f"\npostcode: {location_data['postcode']}, "
-            estate_info += f"city: {location_data['city']}, "
-            estate_info += f"district: {location_data['district']}"
+            estate_info += (
+            f"\n{'postcode:':<30}{location_data['postcode']}"+
+            f"\n{'city:':<30}{location_data['city']}"+
+            f"\n{'district:':<30}{location_data['district']}")
         except: 
             estate_info += f"\n no location data"
 
-        estate_picture = estate_data["pictures"][0]
-        estate_info += f"\npicture: {estate_picture['description']}: {estate_picture['imageUri']}\n\n"
+        estate_info += ("\n```"+
+        f"\nhttps://www.immowelt.de/expose/{estate_data['onlineId']}\n\n")
+
         return estate_info
     
     except: 
@@ -193,7 +198,9 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for image in images:
             await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(image, 'rb'))
         for message in messages:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+            for character in "._(),*[]~>#+-=|{}!":
+                message = message.replace(character, f'\{character}')
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode='MarkdownV2')
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Done!")
 
