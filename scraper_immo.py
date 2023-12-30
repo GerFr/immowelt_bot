@@ -6,7 +6,6 @@ from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes
 from telegram.ext import CommandHandler
 
-
 def get_titles(request_content: bytes)->object:
     soup = BeautifulSoup(request_content, 'html.parser')
     text = str(soup.find_all("h2"))
@@ -106,7 +105,7 @@ def extract_info(estate_data: dict)-> str:
 
 
 def get_url(message: str)->str:
-    return f"https://www.immowelt.de/suche/{message}/wohnungen/"
+    return f"https://www.immowelt.de/suche/{message}/wohnungen/mieten"
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -137,7 +136,7 @@ def get_token(file_dir):
         return file.readline(46)
         
 TOKEN = get_token("token.txt")
-DEFAULT_URL = "https://www.immowelt.de/suche/wohnungen/"
+DEFAULT_URL = "https://www.immowelt.de/suche/wohnungen/mieten"
 
 application = ApplicationBuilder().token(TOKEN).build()
 
