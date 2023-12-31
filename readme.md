@@ -21,8 +21,12 @@ A python installation is also needed. Version 3.10 or above peferred.
 
 ### Using the Bot
 Add the [bot](https://web.telegram.org/#6642991748) to your telegram.
-Message the location of interest like `hamburg-ottensen`.
+Message the location of interest like `hamburg-ottensen` or `muenchen`.
 Current estates for that location will be sent as a reply.
 
+### Example output - Estate data
+It would look like this:
+
+![Untitled](https://github.com/GerFr/immowelt_bot/assets/140012598/987f4c6f-0dcf-48ae-9de6-2b615dd9ef75)
 
 
