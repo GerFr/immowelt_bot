@@ -1,4 +1,6 @@
 token.txt
+admin.txt
 *.json
 *.out
 *.png
+*.log

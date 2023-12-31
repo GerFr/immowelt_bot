@@ -8,8 +8,25 @@ from telegram.ext import CommandHandler
 import pandas as pd
 import plotnine as p9
 import warnings
-warnings.filterwarnings('ignore')
+import logging
 
+
+def get_creds(file_dir, length):
+    with open(file_dir, "r") as file: return file.readline(length)
+
+TOKEN = get_creds("token.txt", 46)
+ADMIN_ID = int(get_creds("admin.txt", 10))
+DEFAULT_URL = "https://www.immowelt.de/suche/wohnungen/mieten"
+LOG_FILENAME = "scraper_immo.log"
+LOG_LEVEL = logging.WARNING # everything lower shows telegrams logs aswell
+
+
+warnings.filterwarnings('ignore')
+logging.basicConfig(format='%(asctime)s %(message)s',
+                    filename=LOG_FILENAME, 
+                    encoding='utf-8', 
+                    level=LOG_LEVEL, 
+                    filemode='w')
 
 def extract_jsons_from_string(data_string: str)-> list:
     first_index = []
@@ -68,6 +85,7 @@ def get_immo_data(url):
             json.dump(immo_data, file)
         return immo_data["initialState"]["estateSearch"]["data"]["estates"]
     except Exception as e:
+        logging.error(f"Failed to fetch data from url: {url}")
         return None
  
 
@@ -108,7 +126,7 @@ def extract_info(estate_data: dict)-> str:
         return estate_info
     
     except: 
-        print(f"String creation failed for {estate_data['id']}")
+        logging.error(f"String creation failed for {estate_data['id']}")
         return f"\nerror in extracting data from estate \n\n"
 
     
@@ -119,7 +137,7 @@ def get_series(estate_data: dict)->pd.Series:
         location_data = estate_data["place"]
         
         #change default values, use get
-        area = estate_data["areas"][0]["sizeMin"] #if len(estate_data["areas"])>0 else 50
+        area = estate_data["areas"][0]["sizeMin"]
         return pd.Series({
             "id":estate_data["id"], 
             "area":area,"rooms":str(estate_data["roomsMin"]), 
@@ -128,7 +146,7 @@ def get_series(estate_data: dict)->pd.Series:
             "district":location_data["district"]})
     
     except Exception as e:
-        print(f"Series creation failed for {estate_data['id']}")
+        logging.error(f"Series creation failed for {estate_data['id']}")
         return pd.Series()
 
 
@@ -176,11 +194,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text=f"Hi {name}, say anything..."
     )
 
+async def logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if ADMIN_ID != update.effective_user.id:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Not authentification")
+        logging.warning(f"Log view attempt by {update.effective_user.name}")
+        return None
+    try:
+        with open(LOG_FILENAME, "r") as logs:
+            log_messages = [log for log in logs]
+        message = ''.join(log_messages[-4:])
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+    except Exception as e:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="failed getting log data")
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message.text
+    user = update.effective_user
+    logging.warning(f"Search query by {user.name} for {message}")
     message_url = get_url(message)
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Hi {update.effective_user.first_name},\nlooking into the following Url:\n{message_url}")
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Hi {user.first_name},\nlooking into the following Url:\n{message_url}")
     estate_list = get_immo_data(message_url)
     
     if  not estate_list: 
@@ -205,17 +237,13 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Done!")
 
 
-def get_token(file_dir):
-    with open(file_dir, "r") as file: return file.readline(46)
-
-
-TOKEN = get_token("token.txt")
-DEFAULT_URL = "https://www.immowelt.de/suche/wohnungen/mieten"
-
 application = ApplicationBuilder().token(TOKEN).build()
 
 start_handler = CommandHandler('start', start)
+log_handler = CommandHandler('logs', logs)
 echo_handler = MessageHandler(filters.TEXT & (~filters.COMMAND), echo)
 application.add_handler(start_handler)
+application.add_handler(log_handler)
 application.add_handler(echo_handler)
+
 application.run_polling()
