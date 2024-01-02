@@ -27,6 +27,6 @@ Current estates for that location will be sent as a reply.
 ### Example output - Estate data
 It would look like this:
 
-![Untitled](https://github.com/GerFr/immowelt_bot/assets/140012598/987f4c6f-0dcf-48ae-9de6-2b615dd9ef75)
+![Untitled](https://github.com/GerFr/immowelt_bot/assets/140012598/bcc3b724-432f-4324-a848-434578f8ba7a)
 
 
