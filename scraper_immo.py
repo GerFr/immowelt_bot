@@ -19,6 +19,8 @@ ADMIN_ID = int(get_creds("admin.txt", 10))
 DEFAULT_URL = "https://www.immowelt.de/suche/wohnungen/mieten"
 LOG_FILENAME = "scraper_immo.log"
 LOG_LEVEL = logging.WARNING # everything lower shows telegrams logs aswell
+LOG_LENGTH = 10
+TEXT_INDENT = 25
 
 
 warnings.filterwarnings('ignore')
@@ -97,38 +99,58 @@ def sort_estates(estates:dict)->dict:
     return sorted(estates, key = lambda estate: estate["prices"][0]["amountMin"])
 
 
+
+
+def format_md(data:str)->str:
+    for character in "._(),*[]~>`#+-=|{}!":
+        data = data.replace(character, f'\{character}')
+    return data
+
+
+def get_md(estate:dict, *args)->str:
+    try:
+        value = estate
+        for argument in args:
+            value = value[argument]
+        return format_md(str(value))
+    except Exception as e:
+        string_arguments = ", ".join([str(arg) for arg in args])
+        logging.error(f"Data exstraction failed for {estate['id']} and {string_arguments}")
+        return "no data"
+
+
 def extract_info(estate_data: dict)-> str:
-    try: #use get instead
+    try:
         estate_info = ""
         estate_info += (
-        f"{estate_data['title']}\n"+"```"+
-        f"\n{'id:'}\t{estate_data['id']}"+
-        f"\n{'area:':<30}{estate_data['areas'][0]['sizeMin']}"+
-        f"\n{'Rooms:':<30}{estate_data['roomsMin']}")
+        f"{get_md(estate_data,'title')}\n"+
+
+        "\n```"+
+        f"\n{'id'}\t{get_md(estate_data,'id')}"+
+        f"\n{'area':{TEXT_INDENT}}{get_md(estate_data,'areas',0,'sizeMin')}"+
+        f"\n{'Rooms':{TEXT_INDENT}}{get_md(estate_data,'roomsMin')}")
         
         for pricing in estate_data["prices"]:
+            search = "\_"
+            pricing_type = get_md(pricing,'type').lower().replace(search, ' ')
             estate_info += (
-            f"\n{pricing['type'].lower().replace('_', ' ')+':':30}"+
-            f"{pricing['amountMin']} {pricing['currency']}")
+            f"\n{pricing_type:{TEXT_INDENT}}"+
+            f"{get_md(pricing,'amountMin')} {get_md(pricing,'currency')}")
          
-        try: 
-            location_data = estate_data["place"]
-            estate_info += (
-            f"\n{'postcode:':<30}{location_data['postcode']}"+
-            f"\n{'city:':<30}{location_data['city']}"+
-            f"\n{'district:':<30}{location_data['district']}")
-        except: 
-            estate_info += f"\n no location data"
+        location_data = estate_data["place"]
+        estate_info += (
+        f"\n{'postcode':{TEXT_INDENT}}{get_md(location_data,'postcode')}"+
+        f"\n{'city':{TEXT_INDENT}}{get_md(location_data,'city')}"+
+        f"\n{'district':{TEXT_INDENT}}{get_md(location_data,'district')}"+
+        "\n```")
 
-        estate_info += ("\n```"+
-        f"\nhttps://www.immowelt.de/expose/{estate_data['onlineId']}\n\n")
-
-        return estate_info
+        return estate_info + format_md(f"\nhttps://www.immowelt.de/expose/{estate_data['onlineId']}\n\n")
     
     except: 
-        logging.error(f"String creation failed for {estate_data['id']}")
-        return f"\nerror in extracting data from estate \n\n"
-
+        message = f"String creation failed for {estate_data['id']}"
+        logging.error(message)
+        return None
+    
     
 def get_series(estate_data: dict)->pd.Series:
     try:
@@ -202,15 +224,15 @@ async def logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         with open(LOG_FILENAME, "r") as logs:
             log_messages = [log for log in logs]
-        message = ''.join(log_messages[-4:])
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+        message = "```\n"+format_md(''.join(log_messages[-LOG_LENGTH:]))+"\n```"
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode='MarkdownV2')
     except Exception as e:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="failed getting log data")
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message.text
     user = update.effective_user
-    logging.warning(f"Search query by {user.name} for {message}")
+    logging.warning(f"Request by {user.name} for {message}")
     message_url = get_url(message)
     await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Hi {user.first_name},\nlooking into the following Url:\n{message_url}")
     estate_list = get_immo_data(message_url)
@@ -222,7 +244,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=update.effective_chat.id, text=f"analysis...")
         
         filtered_estates = sort_estates(filter_estates(["[TAUSCHWOHNUNG]","Wohnungsswap"], estate_list, "title"))
-        messages = [extract_info(estate) for estate in filtered_estates]
+        messages = [message for message in [extract_info(estate) for estate in filtered_estates] if message]
         estate_dataframe = get_dataframe([get_series(estate) for estate in filtered_estates])
         images = create_images(estate_dataframe)
         
@@ -230,8 +252,6 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for image in images:
             await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(image, 'rb'))
         for message in messages:
-            for character in "._(),*[]~>#+-=|{}!":
-                message = message.replace(character, f'\{character}')
             await context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode='MarkdownV2')
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Done!")
