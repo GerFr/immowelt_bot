@@ -96,7 +96,10 @@ def filter_estates(keywords:list, estates:dict, category:str)->list:
 
 
 def sort_estates(estates:dict)->dict:
-    return sorted(estates, key = lambda estate: estate["prices"][0]["amountMin"])
+    def sort_key(estate:dict)->dict:
+        try: return estate["prices"][0]["amountMin"]
+        except: return float("inf")
+    return sorted(estates, key = sort_key)
 
 
 
