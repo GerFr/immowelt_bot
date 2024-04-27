@@ -75,7 +75,7 @@ def largest_json(list)-> dict:
 
 
 def get_url(message: str)->str:
-    return f"https://www.immowelt.de/suche/{message}/wohnungen/mieten"
+    return f"https://www.immowelt.de/suche/{message.lower()}/wohnungen/mieten"
 
 
 def get_immo_data(url):
@@ -207,8 +207,11 @@ def create_images(estate_dataframe:pd.DataFrame)->list:
     images = []
     for i, plot in enumerate(plots):
         name = f'img{i}.png'
-        plot.save(filename = name, height=5, width=5, units = 'in', dpi=1000)
-        images.append(name)
+        try:
+            plot.save(filename = name, height=5, width=5, units = 'in', dpi=1000)
+            images.append(name)
+        except:
+            logging.warning("failed to save {name}")
     return images
 
 
